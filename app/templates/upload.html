@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Încarcă conținut{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3>Încarcă conținut nou</h3>
+            </div>
+            <div class="card-body">
+                <!-- Informații despre tipurile suportate -->
+                <div class="alert alert-info mb-4">
+                    <h5>Ce poți încărca:</h5>
+                    <ul class="mb-0">
+                        <li><strong>Fișiere:</strong> txt, pdf, doc, mp4, mov, mp3, wav</li>
+                        <li><strong>Link-uri web:</strong> articole, bloguri, pagini de știri</li>
+                        <li><strong>Text manual:</strong> analiză directă cu AI (fără salvare)</li>
+                    </ul>
+                </div>
+
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Titlu</label>
+                        <input type="text" class="form-control" id="title" name="title" 
+                               value="{{ request.args.get('title', manual_title or '') }}" required 
+                               placeholder="Dă un titlu conținutului">
+                        <div class="form-text">
+                            Pentru URL-uri, titlul poate fi extras automat dacă nu îl completezi.
+                        </div>
+                    </div>
+
+                    <!-- Tab-uri pentru a alege între fișier, URL și text manual -->
+                    <div class="mb-3">
+                        <h5>Alege sursa conținutului:</h5>
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="source_type" id="source_file" value="file" checked>
+                            <label class="btn btn-outline-primary" for="source_file">Încarcă fișier</label>
+                            
+                            <input type="radio" class="btn-check" name="source_type" id="source_url" value="url">
+                            <label class="btn btn-outline-primary" for="source_url">Link web</label>
+                            
+                            <!-- NOU: Opțiunea pentru text manual -->
+                            <input type="radio" class="btn-check" name="source_type" id="source_manual" value="manual_text">
+                            <label class="btn btn-outline-primary" for="source_manual">📝 Text manual</label>
+                        </div>
+                    </div>
+
+                    <!-- Secțiunea pentru fișiere -->
+                    <div id="file-section" class="mb-3">
+                        <label for="file" class="form-label">Selectează fișier</label>
+                        <input type="file" class="form-control" id="file" name="file">
+                        <div class="form-text text-muted">
+                            <strong>Acceptăm:</strong><br>
+                            📄 Text: txt, pdf, doc, docx<br>
+                            🎥 Video: mp4, mov, avi<br>
+                            🎵 Audio: mp3, wav, ogg
+                        </div>
+                    </div>
+
+                    <!-- Secțiunea pentru URL-uri -->
+                    <div id="url-section" class="mb-3" style="display: none;">
+                        <label for="url" class="form-label">Link către conținut</label>
+                        <input type="url" class="form-control" id="url" name="url" 
+                               value="{{ request.args.get('url', '') }}"
+                               placeholder="https://example.com/articol">
+                        <div class="form-text text-muted">
+                            <strong>Funcționează bine cu:</strong><br>
+                            📰 Articole de știri<br>
+                            📝 Postări de blog<br>
+                            📖 Pagini Wikipedia<br>
+                            📄 Documentații online
+                        </div>
+                        
+                        <!-- Buton pentru testarea URL-ului -->
+                        <div class="mt-2">
+                            <a href="/test-url-extraction" class="btn btn-sm btn-outline-info" target="_blank">
+                                🔍 Testează mai întâi URL-ul
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Secțiunea pentru text manual - NOU -->
+                    <div id="manual-section" class="mb-3" style="display: none;">
+                        <label for="manual_text" class="form-label">Textul pentru analiză directă</label>
+                        <textarea class="form-control" id="manual_text" name="manual_text" 
+                                  rows="8" placeholder="Introdu aici textul pe care vrei să îl analizezi direct...">{{ manual_text or '' }}</textarea>
+                        <div class="form-text text-muted">
+                            <strong>Analiză directă:</strong><br>
+                            🚀 Textul va fi analizat imediat cu TinyLlama<br>
+                            📊 Vei primi un scor de factualitate instant<br>
+                            💾 Nu se salvează în baza de date - doar analiză<br>
+                            <span id="manual-char-count">0</span> caractere
+                        </div>
+                        
+                        <div class="alert alert-info mt-2">
+                            ℹ️
+                            <strong>Diferența:</strong> Dacă alegi "Text manual", textul va fi analizat direct fără să fie salvat ca conținut permanent. 
+                            Pentru a salva textul și să poată fi evaluat de alți utilizatori, încarcă-l ca fișier .txt.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="content_type" class="form-label">Tipul conținutului</label>
+                        <select class="form-select" id="content_type" name="content_type">
+                            <option value="text">Text (articole, documente)</option>
+                            <option value="video">Video</option>
+                            <option value="audio">Audio</option>
+                        </select>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg">Procesează conținutul</button>
+                        <a href="/" class="btn btn-outline-secondary">Anulează</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Logică pentru a schimba între fișier, URL și text manual
+    document.querySelectorAll('input[name="source_type"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const fileSection = document.getElementById('file-section');
+            const urlSection = document.getElementById('url-section');
+            const manualSection = document.getElementById('manual-section');
+            const fileInput = document.getElementById('file');
+            const urlInput = document.getElementById('url');
+            const manualInput = document.getElementById('manual_text');
+            
+            // Ascunde toate secțiunile mai întâi
+            fileSection.style.display = 'none';
+            urlSection.style.display = 'none';
+            manualSection.style.display = 'none';
+            
+            // Elimină atributul required de la toate
+            fileInput.removeAttribute('required');
+            urlInput.removeAttribute('required');
+            manualInput.removeAttribute('required');
+            
+            // Golește valorile (doar dacă nu vin din backend)
+            if (!{{ 'true' if manual_text else 'false' }}) {
+                fileInput.value = '';
+                urlInput.value = '';
+                manualInput.value = '';
+            }
+            
+            // Afișează secțiunea corectă
+            if (this.value === 'file') {
+                fileSection.style.display = 'block';
+                fileInput.setAttribute('required', '');
+            } else if (this.value === 'url') {
+                urlSection.style.display = 'block';
+                urlInput.setAttribute('required', '');
+            } else if (this.value === 'manual_text') {
+                manualSection.style.display = 'block';
+                manualInput.setAttribute('required', '');
+                updateManualCharCount(); // Actualizează contorul
+            }
+        });
+    });
+    
+    // Funcție pentru contorizarea caracterelor în text manual
+    function updateManualCharCount() {
+        const text = document.getElementById('manual_text').value;
+        const charCount = text.length;
+        const counter = document.getElementById('manual-char-count');
+        counter.textContent = charCount;
+        
+        // Schimbă culoarea dacă devine prea lung
+        if (charCount > 2000) {
+            counter.style.color = 'orange';
+            counter.title = 'Text lung - doar începutul va fi analizat';
+        } else {
+            counter.style.color = '';
+            counter.title = '';
+        }
+    }
+    
+    // Adaugă event listener pentru contorizarea caracterelor
+    document.getElementById('manual_text').addEventListener('input', updateManualCharCount);
+    
+    // Inițializez corect dacă vine cu URL din query params
+    {% if request.args.get('url') %}
+        document.getElementById('source_url').checked = true;
+        document.getElementById('source_url').dispatchEvent(new Event('change'));
+    {% endif %}
+    
+    // Inițializez corect dacă vine cu text manual din backend
+    {% if manual_text %}
+        document.getElementById('source_manual').checked = true;
+        document.getElementById('source_manual').dispatchEvent(new Event('change'));
+    {% endif %}
+    
+    // Actualizare automată tip conținut bazat pe extensia fișierului
+    document.getElementById('file').addEventListener('change', function() {
+        const fileName = this.value.toLowerCase();
+        const contentTypeSelect = document.getElementById('content_type');
+        
+        if (fileName.includes('.mp4') || fileName.includes('.mov') || fileName.includes('.avi')) {
+            contentTypeSelect.value = 'video';
+        } else if (fileName.includes('.mp3') || fileName.includes('.wav') || fileName.includes('.ogg')) {
+            contentTypeSelect.value = 'audio';
+        } else {
+            contentTypeSelect.value = 'text';
+        }
+    });
+</script>
+{% endblock %}
